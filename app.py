@@ -110,7 +110,7 @@ def generate_report_bytes(df_subset, prefix_label):
     ws_toc.add_data_validation(wave_dv)
     wave_dv.add(ws_toc['C2'])
 
-    # Type Filter Row (Only for Combined file)
+    # Type Filter Row (Only for Combined file, strictly excluding PUBSC)
     if is_combined:
         ws_toc.append(["", "Select Type:", "All Types"])
         ws_toc.cell(row=3, column=2).font = BOLD_FONT
@@ -176,8 +176,8 @@ def generate_report_bytes(df_subset, prefix_label):
             ws.cell(row=h1_row, column=c).font = WHITE_BOLD_FONT
             ws.cell(row=h1_row, column=c).alignment = Alignment(horizontal="center", vertical="center")
             ws.cell(row=h2_row, column=c).fill = LIGHT_ORANGE_FILL
-            ws.cell(row=h2_row, column=c).font = BOLD_FONT
-            ws.cell(row=h2_row, column=c).alignment = Alignment(horizontal="center", vertical="center")
+            ws.cell(row=h1_row, column=c).font = BOLD_FONT
+            ws.cell(row=h1_row, column=c).alignment = Alignment(horizontal="center", vertical="center")
 
         row_counter = 0
         for _, row in officers_subset.iterrows():
@@ -200,7 +200,6 @@ def generate_report_bytes(df_subset, prefix_label):
                 fnb_pas_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
                 fnb_pro_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
             else:
-                # Simplified formulas for Growth and R10M (Wave filter only)
                 bm_count_formula = f'=IF(TOC!$C$2="All Waves", COUNTIFS(data!$H:$H, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, ">0", data!$M:$M, N{formula_row}))'
                 fnb_count_formula = f'=IF(TOC!$C$2="All Waves", COUNTIFS(data!$I:$I, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, ">0", data!$M:$M, N{formula_row}))'
                 
@@ -333,6 +332,16 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
                             rename_map[upper_to_orig[cand.upper()]] = target
                             break
 
+                # --- ABSOLUTE PUBSC PURGE ---
+                # Completely drop PUBSC (numeric code 3) from raw and labelled data right at the start
+                orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
+                raw_type_numeric = pd.to_numeric(df_raw[orig_type_col], errors='coerce')
+                valid_mask = raw_type_numeric.isin([1, 2])
+
+                df_raw = df_raw[valid_mask].reset_index(drop=True)
+                df_lbl = df_lbl[valid_mask].reset_index(drop=True)
+                raw_type_numeric = raw_type_numeric[valid_mask].reset_index(drop=True)
+
                 df_base = pd.DataFrame()
                 for orig_col, target in rename_map.items():
                     if target in ['WAVE', 'REGION', 'SUBREG', 'SEGMENT'] and orig_col in df_lbl.columns:
@@ -341,7 +350,6 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
                         df_base[target] = df_raw[orig_col]
 
                 if 'TYPE' in df_lbl.columns:
-                    orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
                     df_base['TYPE'] = df_lbl[orig_type_col]
 
                 if selected_waves_filter != 'ALL' and 'WAVE' in df_base.columns:
@@ -368,12 +376,11 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
 
                 runs = []
                 if 'TYPE' in df_raw.columns:
-                    orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
-                    raw_type_numeric = pd.to_numeric(df_raw[orig_type_col], errors='coerce')
+                    subset_type_numeric = pd.to_numeric(df_raw[orig_type_col], errors='coerce')
 
-                    mask_comb = raw_type_numeric.isin([1, 2])
-                    mask_grow = raw_type_numeric == 1
-                    mask_r10m = raw_type_numeric == 2
+                    mask_comb = subset_type_numeric.isin([1, 2])
+                    mask_grow = subset_type_numeric == 1
+                    mask_r10m = subset_type_numeric == 2
 
                     df_comb = df_base[mask_comb].copy()
                     df_grow = df_base[mask_grow].copy()
