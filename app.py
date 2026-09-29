@@ -13,6 +13,12 @@ st.set_page_config(page_title="Project Star NPS Generator", layout="centered")
 st.title("⭐ Project Star: NPS Dashboard & Streamlined Data Generator")
 st.markdown("Upload your master SPSS (`.sav`) data file below, select your wave preferences and portfolio filter, then click **Run Processing** to generate your reports.")
 
+# --- Initialize Session State Memory ---
+if "reports_ready" not in st.session_state:
+    st.session_state.reports_ready = False
+if "report_files" not in st.session_state:
+    st.session_state.report_files = {}
+
 # --- File Uploader ---
 uploaded_file = st.file_uploader("Upload Master SPSS Data File (.sav)", type=["sav"])
 
@@ -44,18 +50,23 @@ elif filter_option == "Specific Waves List":
     waves_input = st.text_input("Enter waves separated by commas:", "Wave 20, Wave 21, Wave 22")
     selected_waves_filter = [w.strip() for w in waves_input.split(',')]
 
-def generate_report_files(df_subset, prefix_label):
+def generate_report_bytes(df_subset, prefix_label):
     excel_name = f"Overall NPS Rating per BM RM Portfolio_{prefix_label}.xlsx"
     sav_name = f"Project Star_NPS_Streamlined_{prefix_label}.sav"
 
+    temp_excel = f"temp_{prefix_label}.xlsx"
+    temp_sav = f"temp_{prefix_label}.sav"
+
     # Export Streamlined SAV
-    pyreadstat.write_sav(df_subset, sav_name)
+    pyreadstat.write_sav(df_subset, temp_sav)
+    with open(temp_sav, "rb") as f:
+        sav_bytes = f.read()
 
     # Build Excel Dashboard
-    with pd.ExcelWriter(excel_name, engine='openpyxl') as writer:
+    with pd.ExcelWriter(temp_excel, engine='openpyxl') as writer:
         df_subset.to_excel(writer, sheet_name='data', index=False)
 
-    wb = openpyxl.load_workbook(excel_name)
+    wb = openpyxl.load_workbook(temp_excel)
     ws_toc = wb.create_sheet(title='TOC', index=0)
     ws_nps = wb.create_sheet(title='NPS', index=1)
     ws_data = wb['data']
@@ -250,119 +261,137 @@ def generate_report_files(df_subset, prefix_label):
             for col in ['E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N']:
                 ws.column_dimensions[col].width = 11
 
-    wb.save(excel_name)
-    return excel_name, sav_name
+    wb.save(temp_excel)
+    with open(temp_excel, "rb") as f:
+        excel_bytes = f.read()
 
-if st.button("🚀 Run Processing & Generate Reports", type="primary"):
+    return excel_bytes, excel_name, sav_bytes, sav_name
+
+# --- Run Button Trigger ---
+if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.session_state.reports_ready:
     if uploaded_file is None:
         st.error("Please upload a `.sav` file first!")
+        st.session_state.reports_ready = False
     else:
-        with st.spinner("Processing data and building formatted reports..."):
-            temp_src_path = "temp_input.sav"
-            with open(temp_src_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+        if not st.session_state.reports_ready:
+            with st.spinner("Processing data and building formatted reports..."):
+                temp_src_path = "temp_input.sav"
+                with open(temp_src_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
 
-            # Load data
-            df_raw, meta = pyreadstat.read_sav(temp_src_path, apply_value_formats=False)
-            df_raw.columns = [str(col).strip().upper() for col in df_raw.columns]
+                # Load raw data to evaluate precise numeric TYPE codes (1, 2, 3)
+                df_raw, meta = pyreadstat.read_sav(temp_src_path, apply_value_formats=False)
+                df_raw.columns = [str(col).strip().upper() for col in df_raw.columns]
 
-            df_lbl, _ = pyreadstat.read_sav(temp_src_path, apply_value_formats=True)
-            df_lbl.columns = [str(col).strip().upper() for col in df_lbl.columns]
+                df_lbl, _ = pyreadstat.read_sav(temp_src_path, apply_value_formats=True)
+                df_lbl.columns = [str(col).strip().upper() for col in df_lbl.columns]
 
-            target_columns_mapping = {
-                'UNIQUEID': ['UNIQUEID', 'ID'],
-                'RUID': ['RUID'],
-                'TYPE': ['TYPE'],
-                'WAVE': ['WAVE'],
-                'REGION': ['REGION'],
-                'SUBREG': ['SUBREG'],
-                'SEGMENT': ['SEGMENT'],
-                'RM_NPS1': ['RM_NPS1', 'BM_NPS1', 'BMNPS01'],
-                'FNB_NPS1': ['FNB_NPS1', 'FNBNPS01'],
-                'PRIM_OFCR_IND': ['PRIM_OFCR_IND', 'PRIM_OFC'],
-                'OFFICER_NAME': ['OFFICER_NAME', 'OFFICER_M', 'OFFICER_NAME_']
-            }
+                target_columns_mapping = {
+                    'UNIQUEID': ['UNIQUEID', 'ID'],
+                    'RUID': ['RUID'],
+                    'TYPE': ['TYPE'],
+                    'WAVE': ['WAVE'],
+                    'REGION': ['REGION'],
+                    'SUBREG': ['SUBREG'],
+                    'SEGMENT': ['SEGMENT'],
+                    'RM_NPS1': ['RM_NPS1', 'BM_NPS1', 'BMNPS01'],
+                    'FNB_NPS1': ['FNB_NPS1', 'FNBNPS01'],
+                    'PRIM_OFCR_IND': ['PRIM_OFCR_IND', 'PRIM_OFC'],
+                    'OFFICER_NAME': ['OFFICER_NAME', 'OFFICER_M', 'OFFICER_NAME_']
+                }
 
-            upper_to_orig = {str(c).strip().upper(): c for c in df_raw.columns}
-            rename_map = {}
-            for target, candidates in target_columns_mapping.items():
-                for cand in candidates:
-                    if cand.upper() in upper_to_orig:
-                        rename_map[upper_to_orig[cand.upper()]] = target
-                        break
+                upper_to_orig = {str(c).strip().upper(): c for c in df_raw.columns}
+                rename_map = {}
+                for target, candidates in target_columns_mapping.items():
+                    for cand in candidates:
+                        if cand.upper() in upper_to_orig:
+                            rename_map[upper_to_orig[cand.upper()]] = target
+                            break
 
-            df_base = pd.DataFrame()
-            for orig_col, target in rename_map.items():
-                if target in ['TYPE', 'WAVE', 'REGION', 'SUBREG', 'SEGMENT'] and orig_col in df_lbl.columns:
-                    df_base[target] = df_lbl[orig_col]
-                else:
-                    df_base[target] = df_raw[orig_col]
+                df_base = pd.DataFrame()
+                for orig_col, target in rename_map.items():
+                    if target in ['WAVE', 'REGION', 'SUBREG', 'SEGMENT'] and orig_col in df_lbl.columns:
+                        df_base[target] = df_lbl[orig_col]
+                    else:
+                        df_base[target] = df_raw[orig_col]
 
-            # Apply Wave filter first
-            if selected_waves_filter != 'ALL' and 'WAVE' in df_base.columns:
-                df_base = df_base[df_base['WAVE'].isin(selected_waves_filter)].copy()
+                # Keep labelled TYPE for Excel display, but use numeric raw TYPE for strict filtering
+                if 'TYPE' in df_lbl.columns:
+                    orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
+                    df_base['TYPE'] = df_lbl[orig_type_col]
 
-            # Clean officer names & codes across base
-            def clean_officer_name(name):
-                if pd.isna(name):
-                    return name
-                s = str(name).strip()
-                s = re.sub(r'\s*\(.*?\)', '', s)
-                return ' '.join(s.split())
+                if selected_waves_filter != 'ALL' and 'WAVE' in df_base.columns:
+                    df_base = df_base[df_base['WAVE'].isin(selected_waves_filter)].copy()
 
-            if 'OFFICER_NAME' in df_base.columns:
-                df_base['OFFICER_NAME'] = df_base['OFFICER_NAME'].apply(clean_officer_name)
+                def clean_officer_name(name):
+                    if pd.isna(name):
+                        return name
+                    s = str(name).strip()
+                    s = re.sub(r'\s*\(.*?\)', '', s)
+                    return ' '.join(s.split())
 
-            if 'OFFICER_NAME' in df_base.columns and 'PRIM_OFCR_IND' in df_base.columns:
-                df_base['OFFICER_NAME'] = df_base['OFFICER_NAME'].astype(str).str.strip()
-                df_base['PRIM_OFCR_IND'] = df_base['PRIM_OFCR_IND'].astype(str).str.strip()
-                df_base['OFFICER_NAME2'] = df_base['OFFICER_NAME'] + df_base['PRIM_OFCR_IND']
-                df_base = df_base.sort_values(by='OFFICER_NAME2').reset_index(drop=True)
-                unique_names = df_base['OFFICER_NAME2'].unique()
-                name_to_code = {name: idx + 1 for idx, name in enumerate(unique_names)}
-                df_base['OFFICE_CODE'] = df_base['OFFICER_NAME2'].map(name_to_code)
+                if 'OFFICER_NAME' in df_base.columns:
+                    df_base['OFFICER_NAME'] = df_base['OFFICER_NAME'].apply(clean_officer_name)
 
-            # Precise portfolio separation using strict matching masks
-            runs = []
-            if 'TYPE' in df_base.columns:
-                type_lbl = df_base['TYPE'].astype(str).str.lower()
-                type_raw = df_raw['TYPE'].astype(str).str.strip() if 'TYPE' in df_raw.columns else pd.Series()
+                if 'OFFICER_NAME' in df_base.columns and 'PRIM_OFCR_IND' in df_base.columns:
+                    df_base['OFFICER_NAME'] = df_base['OFFICER_NAME'].astype(str).str.strip()
+                    df_base['PRIM_OFCR_IND'] = df_base['PRIM_OFCR_IND'].astype(str).str.strip()
+                    df_base['OFFICER_NAME2'] = df_base['OFFICER_NAME'] + df_base['PRIM_OFCR_IND']
+                    df_base = df_base.sort_values(by='OFFICER_NAME2').reset_index(drop=True)
+                    unique_names = df_base['OFFICER_NAME2'].unique()
+                    name_to_code = {name: idx + 1 for idx, name in enumerate(unique_names)}
+                    df_base['OFFICE_CODE'] = df_base['OFFICER_NAME2'].map(name_to_code)
 
-                df_comb = df_base[type_lbl.str.contains('growth|r10m', case=False, na=False) | type_raw.isin(['1', '2', '1.0', '2.0'])].copy()
-                df_grow = df_base[(type_lbl.str.contains('growth', case=False, na=False) | type_raw.isin(['1', '1.0'])) & ~type_lbl.str.contains('r10m', case=False, na=False)].copy()
-                df_r10m = df_base[type_lbl.str.contains('r10m', case=False, na=False) | type_raw.isin(['2', '2.0'])].copy()
+                runs = []
+                if 'TYPE' in df_raw.columns:
+                    orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
+                    raw_type_numeric = pd.to_numeric(df_raw[orig_type_col], errors='coerce')
 
-                if portfolio_mode == "Generate All (Combined, Growth, and R10M Separately)":
-                    runs = [("Combined", df_comb), ("Growth", df_grow), ("R10M", df_r10m)]
-                elif portfolio_mode == "Combined (Growth & R10M)":
-                    runs = [("Combined", df_comb)]
-                elif portfolio_mode == "Growth Only":
-                    runs = [("Growth", df_grow)]
-                elif portfolio_mode == "R10M Only":
-                    runs = [("R10M", df_r10m)]
+                    # STRICT NUMERIC SPSS FILTERING: 1 = Growth, 2 = R10m+, 3 = PUBSC (completely excluded)
+                    mask_comb = raw_type_numeric.isin([1, 2])
+                    mask_grow = raw_type_numeric == 1
+                    mask_r10m = raw_type_numeric == 2
+
+                    df_comb = df_base[mask_comb].copy()
+                    df_grow = df_base[mask_grow].copy()
+                    df_r10m = df_base[mask_r10m].copy()
+
+                    if portfolio_mode == "Generate All (Combined, Growth, and R10M Separately)":
+                        runs = [("Combined", df_comb), ("Growth", df_grow), ("R10M", df_r10m)]
+                    elif portfolio_mode == "Combined (Growth & R10M)":
+                        runs = [("Combined", df_comb)]
+                    elif portfolio_mode == "Growth Only":
+                        runs = [("Growth", df_grow)]
+                    elif portfolio_mode == "R10M Only":
+                        runs = [("R10M", df_r10m)]
+
+                st.session_state.report_files = {}
+                for label, subset_df in runs:
+                    ex_bytes, ex_name, sv_bytes, sv_name = generate_report_bytes(subset_df, label)
+                    st.session_state.report_files[label] = {
+                        "excel_bytes": ex_bytes, "excel_name": ex_name,
+                        "sav_bytes": sv_bytes, "sav_name": sv_name
+                    }
+                st.session_state.reports_ready = True
 
         st.success("🎉 Processing complete! Download your report files below:")
 
-        for label, subset_df in runs:
+        for label, files in st.session_state.report_files.items():
             st.markdown(f"### 📁 {label} Reports")
-            ex_file, sv_file = generate_report_files(subset_df, label)
-            
             col_a, col_b = st.columns(2)
             with col_a:
-                with open(ex_file, "rb") as f:
-                    st.download_button(
-                        label=f"📥 Download {label} Excel Dashboard",
-                        data=f,
-                        file_name=ex_file,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"excel_{label}"
-                    )
+                st.download_button(
+                    label=f"📥 Download {label} Excel Dashboard",
+                    data=files["excel_bytes"],
+                    file_name=files["excel_name"],
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key=f"excel_{label}"
+                )
             with col_b:
-                with open(sv_file, "rb") as f:
-                    st.download_button(
-                        label=f"📥 Download {label} .sav File",
-                        data=f,
-                        file_name=sv_file,
-                        mime="application/octet-stream",
-                        key=f"sav_{label}"
-                    )
+                st.download_button(
+                    label=f"📥 Download {label} .sav File",
+                    data=files["sav_bytes"],
+                    file_name=files["sav_name"],
+                    mime="application/octet-stream",
+                    key=f"sav_{label}"
+                )
