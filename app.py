@@ -322,25 +322,23 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary"):
                 name_to_code = {name: idx + 1 for idx, name in enumerate(unique_names)}
                 df_base['OFFICE_CODE'] = df_base['OFFICER_NAME2'].map(name_to_code)
 
-            # Determine subsets based on portfolio mode selection
+            # Precise portfolio separation using strict matching masks
             runs = []
-            if portfolio_mode == "Generate All (Combined, Growth, and R10M Separately)":
-                if 'TYPE' in df_base.columns:
-                    df_comb = df_base[df_base['TYPE'].astype(str).str.contains('Growth|R10m|1|2', case=False, na=False)].copy()
-                    df_grow = df_base[df_base['TYPE'].astype(str).str.contains('Growth|1|2', case=False, na=False)].copy()
-                    df_r10m = df_base[df_base['TYPE'].astype(str).str.contains('R10m', case=False, na=False)].copy()
+            if 'TYPE' in df_base.columns:
+                type_lbl = df_base['TYPE'].astype(str).str.lower()
+                type_raw = df_raw['TYPE'].astype(str).str.strip() if 'TYPE' in df_raw.columns else pd.Series()
+
+                df_comb = df_base[type_lbl.str.contains('growth|r10m', case=False, na=False) | type_raw.isin(['1', '2', '1.0', '2.0'])].copy()
+                df_grow = df_base[(type_lbl.str.contains('growth', case=False, na=False) | type_raw.isin(['1', '1.0'])) & ~type_lbl.str.contains('r10m', case=False, na=False)].copy()
+                df_r10m = df_base[type_lbl.str.contains('r10m', case=False, na=False) | type_raw.isin(['2', '2.0'])].copy()
+
+                if portfolio_mode == "Generate All (Combined, Growth, and R10M Separately)":
                     runs = [("Combined", df_comb), ("Growth", df_grow), ("R10M", df_r10m)]
-            elif portfolio_mode == "Combined (Growth & R10M)":
-                if 'TYPE' in df_base.columns:
-                    df_comb = df_base[df_base['TYPE'].astype(str).str.contains('Growth|R10m|1|2', case=False, na=False)].copy()
+                elif portfolio_mode == "Combined (Growth & R10M)":
                     runs = [("Combined", df_comb)]
-            elif portfolio_mode == "Growth Only":
-                if 'TYPE' in df_base.columns:
-                    df_grow = df_base[df_base['TYPE'].astype(str).str.contains('Growth|1|2', case=False, na=False)].copy()
+                elif portfolio_mode == "Growth Only":
                     runs = [("Growth", df_grow)]
-            elif portfolio_mode == "R10M Only":
-                if 'TYPE' in df_base.columns:
-                    df_r10m = df_base[df_base['TYPE'].astype(str).str.contains('R10m', case=False, na=False)].copy()
+                elif portfolio_mode == "R10M Only":
                     runs = [("R10M", df_r10m)]
 
         st.success("🎉 Processing complete! Download your report files below:")
