@@ -51,6 +51,8 @@ elif filter_option == "Specific Waves List":
     selected_waves_filter = [w.strip() for w in waves_input.split(',')]
 
 def generate_report_bytes(df_subset, prefix_label):
+    is_combined = (prefix_label == "Combined")
+    
     excel_name = f"Overall NPS Rating per BM RM Portfolio_{prefix_label}.xlsx"
     sav_name = f"Project Star_NPS_Streamlined_{prefix_label}.sav"
 
@@ -90,6 +92,7 @@ def generate_report_bytes(df_subset, prefix_label):
     ws_toc.cell(row=1, column=2).font = TITLE_FONT
     ws_toc.cell(row=1, column=2).alignment = Alignment(horizontal="center", vertical="center")
 
+    # Wave Filter Row
     ws_toc.append(["", "Select Wave:", "All Waves"])
     ws_toc.cell(row=2, column=2).font = BOLD_FONT
     ws_toc.cell(row=2, column=2).alignment = Alignment(horizontal="right")
@@ -107,21 +110,25 @@ def generate_report_bytes(df_subset, prefix_label):
     ws_toc.add_data_validation(wave_dv)
     wave_dv.add(ws_toc['C2'])
 
-    ws_toc.append(["", "Select Type:", "All Types"])
-    ws_toc.cell(row=3, column=2).font = BOLD_FONT
-    ws_toc.cell(row=3, column=2).alignment = Alignment(horizontal="right")
-    ws_toc.cell(row=3, column=3).fill = LIGHT_TEAL_FILL
-    ws_toc.cell(row=3, column=3).border = THIN_BORDER
+    # Type Filter Row (Only for Combined file)
+    if is_combined:
+        ws_toc.append(["", "Select Type:", "All Types"])
+        ws_toc.cell(row=3, column=2).font = BOLD_FONT
+        ws_toc.cell(row=3, column=2).alignment = Alignment(horizontal="right")
+        ws_toc.cell(row=3, column=3).fill = LIGHT_TEAL_FILL
+        ws_toc.cell(row=3, column=3).border = THIN_BORDER
 
-    available_types = sorted(df_subset['TYPE'].dropna().unique()) if 'TYPE' in df_subset.columns else []
-    type_list_str = '"All Types,' + ','.join([str(t) for t in available_types]) + '"'
-    type_dv = DataValidation(type="list", formula1=type_list_str, allow_blank=False)
-    ws_toc.add_data_validation(type_dv)
-    type_dv.add(ws_toc['C3'])
+        available_types = sorted(df_subset['TYPE'].dropna().unique()) if 'TYPE' in df_subset.columns else []
+        type_list_str = '"All Types,' + ','.join([str(t) for t in available_types]) + '"'
+        type_dv = DataValidation(type="list", formula1=type_list_str, allow_blank=False)
+        ws_toc.add_data_validation(type_dv)
+        type_dv.add(ws_toc['C3'])
+        toc_header_row = 5
+    else:
+        toc_header_row = 4
 
     ws_toc.append([])
     ws_toc.append(["", "Table of Contents", ""])
-    toc_header_row = 5
     ws_toc.cell(row=toc_header_row, column=2).font = Font(name="Calibri", size=12, bold=True, color="F58220")
 
     toc_entries = []
@@ -181,16 +188,29 @@ def generate_report_bytes(df_subset, prefix_label):
             col_c_val = str(title_text) if title_text != "TOTAL" else str(row['SUBREG'])
             office_code = row['OFFICE_CODE']
             
-            bm_count_formula = f'=IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, ">0", data!$M:$M, N{formula_row}))))'
-            fnb_count_formula = f'=IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, ">0", data!$M:$M, N{formula_row}))))'
-            
-            bm_det_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
-            bm_pas_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
-            bm_pro_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
-            
-            fnb_det_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 1, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
-            fnb_pas_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
-            fnb_pro_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+            if is_combined:
+                bm_count_formula = f'=IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, ">0", data!$M:$M, N{formula_row}))))'
+                fnb_count_formula = f'=IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, ">0", data!$M:$M, N{formula_row}), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, ">0", data!$M:$M, N{formula_row}))))'
+                
+                bm_det_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+                bm_pas_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+                bm_pro_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+                
+                fnb_det_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 1, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+                fnb_pas_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 2, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+                fnb_pro_formula = f'=IFERROR(IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIFS(data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$I:$I, 3, data!$M:$M, N{formula_row})/H{formula_row}))), 0)'
+            else:
+                # Simplified formulas for Growth and R10M (Wave filter only)
+                bm_count_formula = f'=IF(TOC!$C$2="All Waves", COUNTIFS(data!$H:$H, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, ">0", data!$M:$M, N{formula_row}))'
+                fnb_count_formula = f'=IF(TOC!$C$2="All Waves", COUNTIFS(data!$I:$I, ">0", data!$M:$M, N{formula_row}), COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, ">0", data!$M:$M, N{formula_row}))'
+                
+                bm_det_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 1, data!$M:$M, N{formula_row})/H{formula_row}), 0)'
+                bm_pas_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 2, data!$M:$M, N{formula_row})/H{formula_row}), 0)'
+                bm_pro_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$H:$H, 3, data!$M:$M, N{formula_row})/H{formula_row}), 0)'
+                
+                fnb_det_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 1, data!$M:$M, N{formula_row})/M{formula_row}), 0)'
+                fnb_pas_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 2, data!$M:$M, N{formula_row})/M{formula_row}), 0)'
+                fnb_pro_formula = f'=IFERROR(IF(TOC!$C$2="All Waves", COUNTIFS(data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}, COUNTIFS(data!$D:$D, TOC!$C$2, data!$I:$I, 3, data!$M:$M, N{formula_row})/M{formula_row}), 0)'
 
             ws.append([
                 rm_name, prim_code, col_c_val,
@@ -233,10 +253,16 @@ def generate_report_bytes(df_subset, prefix_label):
 
     for label, nps_row_num, subreg_filter in toc_entries:
         row_idx = ws_toc.max_row + 1
-        if subreg_filter == "TOTAL":
-            filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", Type ", TOC!$C$3, ", base n =", IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNT(data!$A:$A), IF(TOC!$C$2="All Waves", COUNTIF(data!$C:$C, TOC!$C$3), IF(TOC!$C$3="All Types", COUNTIF(data!$D:$D, TOC!$C$2), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3)))))'
+        if is_combined:
+            if subreg_filter == "TOTAL":
+                filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", Type ", TOC!$C$3, ", base n =", IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNT(data!$A:$A), IF(TOC!$C$2="All Waves", COUNTIF(data!$C:$C, TOC!$C$3), IF(TOC!$C$3="All Types", COUNTIF(data!$D:$D, TOC!$C$2), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3)))))'
+            else:
+                filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", Type ", TOC!$C$3, ", base n =", IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIF(data!$F:$F, "{subreg_filter}"), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$F:$F, "{subreg_filter}"), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$F:$F, "{subreg_filter}"), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$F:$F, "{subreg_filter}")))))'
         else:
-            filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", Type ", TOC!$C$3, ", base n =", IF(AND(TOC!$C$2="All Waves", TOC!$C$3="All Types"), COUNTIF(data!$F:$F, "{subreg_filter}"), IF(TOC!$C$2="All Waves", COUNTIFS(data!$C:$C, TOC!$C$3, data!$F:$F, "{subreg_filter}"), IF(TOC!$C$3="All Types", COUNTIFS(data!$D:$D, TOC!$C$2, data!$F:$F, "{subreg_filter}"), COUNTIFS(data!$D:$D, TOC!$C$2, data!$C:$C, TOC!$C$3, data!$F:$F, "{subreg_filter}")))))'
+            if subreg_filter == "TOTAL":
+                filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", base n =", IF(TOC!$C$2="All Waves", COUNT(data!$A:$A), COUNTIF(data!$D:$D, TOC!$C$2)))'
+            else:
+                filter_formula = f'=CONCATENATE("Filter: Wave ", TOC!$C$2, ", base n =", IF(TOC!$C$2="All Waves", COUNTIF(data!$F:$F, "{subreg_filter}"), COUNTIFS(data!$D:$D, TOC!$C$2, data!$F:$F, "{subreg_filter}")))'
 
         ws_toc.cell(row=row_idx, column=1, value="NPS").font = BOLD_FONT
         ws_toc.cell(row=row_idx, column=1).alignment = Alignment(horizontal="center")
@@ -279,7 +305,6 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
                 with open(temp_src_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Load raw data to evaluate precise numeric TYPE codes (1, 2, 3)
                 df_raw, meta = pyreadstat.read_sav(temp_src_path, apply_value_formats=False)
                 df_raw.columns = [str(col).strip().upper() for col in df_raw.columns]
 
@@ -315,7 +340,6 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
                     else:
                         df_base[target] = df_raw[orig_col]
 
-                # Keep labelled TYPE for Excel display, but use numeric raw TYPE for strict filtering
                 if 'TYPE' in df_lbl.columns:
                     orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
                     df_base['TYPE'] = df_lbl[orig_type_col]
@@ -347,7 +371,6 @@ if st.button("🚀 Run Processing & Generate Reports", type="primary") or st.ses
                     orig_type_col = [k for k, v in rename_map.items() if v == 'TYPE'][0]
                     raw_type_numeric = pd.to_numeric(df_raw[orig_type_col], errors='coerce')
 
-                    # STRICT NUMERIC SPSS FILTERING: 1 = Growth, 2 = R10m+, 3 = PUBSC (completely excluded)
                     mask_comb = raw_type_numeric.isin([1, 2])
                     mask_grow = raw_type_numeric == 1
                     mask_r10m = raw_type_numeric == 2
