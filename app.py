@@ -11,7 +11,7 @@ import streamlit as st
 st.set_page_config(page_title="Project Star NPS Generator", layout="centered")
 
 st.title("⭐ Project Star: NPS Dashboard & Streamlined Data Generator")
-st.markdown("Upload your master SPSS (`.sav`) data file below, select your wave preferences and portfolio filter, then click **Run Processing** to generate your reports.")
+st.markdown("Upload your master SPSS (`Project Star_W? to W?.sav`) data file below, select your wave preferences and portfolio filter, then click **Run Processing** to generate your reports.")
 
 # --- Initialize Session State Memory ---
 if "reports_ready" not in st.session_state:
